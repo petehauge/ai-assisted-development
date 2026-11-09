@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Production Readiness Review</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --card: #ffffff; --text: #1d1d1b; --muted: #5f5f5a; --border: #e2e1dc;
+    --critical: #b42318; --high: #d1530f; --medium: #b88a00; --low: #2f6fb3; --info: #6b6b66;
+    --ready: #2e7d32; --work: #b88a00; --notready: #b42318;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161615; --card: #1f1f1d; --text: #ecebe6; --muted: #a3a29b; --border: #33322f;
+      --critical: #f97066; --high: #fb8c4a; --medium: #e8c14a; --low: #6ea8e8; --info: #a3a29b;
+      --ready: #6cc070; --work: #e8c14a; --notready: #f97066;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 32px 0 12px; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+  .stats { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+  .stat { flex: 1 1 120px; }
+  .stat b { display: block; font-size: 24px; }
+  .pill { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #fff; }
+  .sev-Critical { background: var(--critical); } .sev-High { background: var(--high); }
+  .sev-Medium { background: var(--medium); } .sev-Low { background: var(--low); } .sev-Info { background: var(--info); }
+  .rate-Ready { background: var(--ready); } .rate-Needs-work { background: var(--work); } .rate-Not-ready { background: var(--notready); }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  select, input { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
+  .finding { margin-bottom: 10px; }
+  .finding summary { cursor: pointer; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .finding code { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+  .finding dl { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; margin: 12px 0 0; }
+  .finding dt { color: var(--muted); }
+  .finding dd { margin: 0; overflow-wrap: anywhere; }
+  @media (max-width: 600px) { .finding dl { grid-template-columns: 1fr; } }
+  ul { padding-left: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Production Readiness Review</h1>
+  <div class="meta" id="meta"></div>
+
+  <section class="card" style="margin-top:16px">
+    <div><span id="overall" class="pill"></span></div>
+    <p id="summary"></p>
+    <div class="stats" id="stats"></div>
+  </section>
+
+  <h2>Areas</h2>
+  <div class="grid" id="areas"></div>
+
+  <h2>Findings</h2>
+  <div class="filters">
+    <select id="f-sev" aria-label="Severity"><option value="">All severities</option></select>
+    <select id="f-area" aria-label="Area"><option value="">All areas</option></select>
+    <input id="f-text" type="search" placeholder="Search findings" aria-label="Search">
+  </div>
+  <div id="findings"></div>
+
+  <h2>Accepted limitations</h2>
+  <ul id="limits"></ul>
+</main>
+
+<script id="review-data" type="application/json">
+{
+  "project": "example",
+  "generatedAt": "2026-01-01T00:00:00Z",
+  "commit": "0000000",
+  "scope": "src/, tests/",
+  "build": { "status": "Pass", "warnings": 0 },
+  "tests": { "passed": 0, "failed": 0, "skipped": 0 },
+  "overall": "Needs work",
+  "summary": "Replace this data block with the merged review results.",
+  "areas": [ { "name": "Security", "rating": "Needs work", "summary": "Example area summary." } ],
+  "findings": [
+    { "area": "Security", "severity": "High", "confidence": "High", "title": "Example finding", "file": "src/Example.cs", "line": 1, "evidence": "Example evidence.", "impact": "Example impact.", "recommendation": "Example fix.", "effort": "S" }
+  ],
+  "acceptedLimitations": [ "Example limitation from docs/plan.md." ]
+}
+</script>
+<script>
+  const data = JSON.parse(document.getElementById('review-data').textContent);
+  const SEV = ['Critical', 'High', 'Medium', 'Low', 'Info'];
+  const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids); return n; };
+  const cssName = s => String(s).replace(/\s+/g, '-');
+  const pill = (cls, text) => el('span', { className: 'pill ' + cssName(cls), textContent: text });
+
+  document.getElementById('meta').textContent =
+    `${data.project} · commit ${data.commit} · scope ${data.scope} · ${new Date(data.generatedAt).toLocaleString()}`;
+  const overall = document.getElementById('overall');
+  overall.textContent = 'Overall: ' + data.overall;
+  overall.classList.add(cssName('rate-' + data.overall));
+  document.getElementById('summary').textContent = data.summary;
+
+  const counts = Object.fromEntries(SEV.map(s => [s, data.findings.filter(f => f.severity === s).length]));
+  const stats = document.getElementById('stats');
+  const stat = (label, value) => stats.append(el('div', { className: 'card stat' }, el('b', { textContent: value }), label));
+  stat('Build', `${data.build.status} (${data.build.warnings} warnings)`);
+  stat('Tests', `${data.tests.passed} passed / ${data.tests.failed} failed`);
+  SEV.slice(0, 4).forEach(s => stat(s, counts[s]));
+
+  const areas = document.getElementById('areas');
+  data.areas.forEach(a => areas.append(el('div', { className: 'card' },
+    el('div', {}, el('b', { textContent: a.name + ' ' }), pill('rate-' + a.rating, a.rating)),
+    el('p', { textContent: a.summary, style: 'margin:8px 0 0' }))));
+
+  const fSev = document.getElementById('f-sev'), fArea = document.getElementById('f-area'), fText = document.getElementById('f-text');
+  SEV.forEach(s => fSev.append(el('option', { value: s, textContent: s })));
+  [...new Set(data.findings.map(f => f.area))].sort().forEach(a => fArea.append(el('option', { value: a, textContent: a })));
+
+  function render() {
+    const list = document.getElementById('findings');
+    list.replaceChildren();
+    const q = fText.value.toLowerCase();
+    data.findings
+      .filter(f => (!fSev.value || f.severity === fSev.value) && (!fArea.value || f.area === fArea.value))
+      .filter(f => !q || JSON.stringify(f).toLowerCase().includes(q))
+      .sort((a, b) => SEV.indexOf(a.severity) - SEV.indexOf(b.severity))
+      .forEach(f => {
+        const dl = el('dl');
+        [['Area', f.area], ['Confidence', f.confidence], ['Evidence', f.evidence], ['Impact', f.impact], ['Recommendation', f.recommendation], ['Effort', f.effort]]
+          .forEach(([k, v]) => dl.append(el('dt', { textContent: k }), el('dd', { textContent: v ?? '' })));
+        list.append(el('details', { className: 'card finding' },
+          el('summary', {}, pill('sev-' + f.severity, f.severity), el('b', { textContent: f.title }), el('code', { textContent: `${f.file}:${f.line}` })),
+          dl));
+      });
+    if (!list.children.length) list.append(el('p', { className: 'meta', textContent: 'No findings match the filters.' }));
+  }
+  [fSev, fArea, fText].forEach(n => n.addEventListener('input', render));
+  render();
+
+  const limits = document.getElementById('limits');
+  (data.acceptedLimitations || []).forEach(l => limits.append(el('li', { textContent: l })));
+  if (!limits.children.length) limits.append(el('li', { className: 'meta', textContent: 'None recorded.' }));
+</script>
+</body>
+</html>

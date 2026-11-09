@@ -426,3 +426,16 @@ FodyWeavers.xsd
 
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
+
+# AI-assisted development kit
+# Local secrets produced by /azure-secrets (never commit)
+secrets.json
+secrets.*.json
+!secrets.example.json
+# Generated review output
+reports/
+CLAUDE-SECURITY-*/
+# Personal Claude Code overrides
+.claude/settings.local.json
+# Personal review comments from the VS Code local-comments extension
+local-comments.json
