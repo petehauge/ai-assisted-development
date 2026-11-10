@@ -1,0 +1,96 @@
+@page "/"
+@rendermode InteractiveServer
+@using TextToSql.Core.Query
+@inject QueryService QueryService
+@inject QueryOptions Options
+
+<PageTitle>Text to SQL</PageTitle>
+
+<main class="ask">
+    <h1>Text to SQL</h1>
+    <p class="hint">Ask a question about the sample retail database (Categories, Products, Customers, Orders, OrderItems). The generated SQL runs as-is, so questions that change data will change it; run <code>seed</code> to reset.</p>
+
+    <form @onsubmit="AskAsync" @onsubmit:preventDefault>
+        <textarea @bind="_question" @bind:event="oninput" rows="3" maxlength="@Options.MaxQuestionLength" placeholder="How many customers are there?" disabled="@_busy" aria-label="Question"></textarea>
+        <button type="submit" disabled="@(_busy || string.IsNullOrWhiteSpace(_question))">@(_busy ? "Asking…" : "Ask")</button>
+    </form>
+
+    @if (_result is { } result)
+    {
+        @if (result.Sql is not null)
+        {
+            <h2>Generated SQL</h2>
+            <pre class="sql"><code>@result.Sql</code></pre>
+        }
+
+        @if (result.Error is not null)
+        {
+            <p class="error" role="alert">@result.Error</p>
+        }
+        else if (result.Columns.Count > 0)
+        {
+            <h2>Results</h2>
+            <p class="meta">@RowSummary(result)</p>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            @foreach (var column in result.Columns)
+                            {
+                                <th>@column</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in result.Rows)
+                        {
+                            <tr>
+                                @foreach (var value in row)
+                                {
+                                    <td>@(value is null ? "NULL" : Convert.ToString(value, System.Globalization.CultureInfo.CurrentCulture))</td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else if (result.RowsAffected is { } affected)
+        {
+            <p class="meta">@affected row(s) affected.</p>
+        }
+        else
+        {
+            <p class="meta">The statement ran and returned no rows.</p>
+        }
+    }
+</main>
+
+@code {
+    private string? _question;
+    private bool _busy;
+    private QueryResult? _result;
+
+    private async Task AskAsync()
+    {
+        if (_busy || string.IsNullOrWhiteSpace(_question))
+        {
+            return;
+        }
+
+        _busy = true;
+        _result = null;
+        try
+        {
+            _result = (await QueryService.AskAsync(_question, CancellationToken.None)).Result;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string RowSummary(QueryResult result) => result.Truncated
+        ? $"Showing the first {result.Rows.Count} rows; the query returned more."
+        : $"{result.Rows.Count} row(s).";
+}

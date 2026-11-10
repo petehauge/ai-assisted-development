@@ -53,7 +53,7 @@ Flow for one question:
 Configuration keys (later sources win: `appsettings.json` → `secrets.json` → environment variables → command line):
 
 - `Foundry:ProjectEndpoint` and `Foundry:DefaultDeployment`.
-- `Database:ConnectionString`: an Azure SQL connection string with `Authentication=Active Directory Default`. No password belongs in it.
+- `Sql:ConnectionString`: an Azure SQL connection string with `Authentication=Active Directory Default`. No password belongs in it. Changed from `Database:ConnectionString` in phase 2 to match the hosted web app's existing `Sql__ConnectionString` setting. `secrets.json` has no top-level connection string, so local development gets one from `appsettings.Development.json`, which points at `aiasst-sql-w3-m4gvse` / `appdb`. Those names are non-secret and already listed in `docs/environment.md`.
 - `Query:MaxRows` (default 50), `Query:CommandTimeoutSeconds` (default 30), and `Query:MaxQuestionLength` (default 1000).
 
 Missing required configuration produces a clear startup or request error naming the missing key, not a crash.
@@ -74,9 +74,9 @@ Missing required configuration produces a clear startup or request error naming 
 | # | Title | Status | Demo command | Note |
 |---|---|---|---|---|
 | 1 | Scaffold, configuration, health endpoint | Done | `dotnet run --project src/TextToSql.Web`, then `curl http://localhost:<port>/api/health` | Solution, 3 projects, secrets.json locator + config order, `/api/health`; 11 tests passing |
-| 2 | Sample database and schema reader | Not started | `dotnet run --project src/TextToSql.Web -- seed`, then `curl http://localhost:<port>/api/schema` | |
-| 3 | Foundry SQL generation, execution, and `/api/query` | Not started | `curl -X POST http://localhost:<port>/api/query -H "Content-Type: application/json" -d "{\"question\":\"How many customers are there?\"}"` | |
-| 4 | Blazor question page | Not started | Run the app, open `/`, ask a question | |
+| 2 | Sample database and schema reader | Done | `dotnet run --project src/TextToSql.Web -- seed`, then `curl http://localhost:<port>/api/schema` | seed.sql (6/30/100/300/750 rows), `seed` verb, `SqlSchemaProvider`, `SchemaFormatter`, `/api/schema`; 8 unit + 2 Live tests passing |
+| 3 | Foundry SQL generation, execution, and `/api/query` | Done | `curl -X POST http://localhost:<port>/api/query -H "Content-Type: application/json" -d "{\"question\":\"How many customers are there?\"}"` | Prompt, `SqlExtractor`, `QueryService`, `FoundrySqlModelClient`, `SqlServerExecutor`, `POST /api/query` (200/400/422/502); 25 unit + 4 Live tests added |
+| 4 | Blazor question page | Done | Run the app, open `/`, ask a question | `Ask.razor` replaces the placeholder home page: SQL, results table with truncation note, rows affected, or error; checked in the browser, no new tests (covered at service/API level) |
 | 5 | Hardening (optional) | Not started | Same as phase 3/4 with error cases | First to cut |
 
 ### Phase 1: Scaffold, configuration, health endpoint
@@ -104,7 +104,7 @@ Missing required configuration produces a clear startup or request error naming 
 - **Goal:** the sample Azure SQL database exists and the app can describe its schema.
 - **Scope:**
   - An embedded `seed.sql` that drops and recreates Categories, Products, Customers, Orders, and OrderItems with primary and foreign keys, plus a few hundred deterministic rows.
-  - The `seed` command runs the script against `Database:ConnectionString` and exits.
+  - The `seed` command runs the script against `Sql:ConnectionString` and exits.
   - `SqlSchemaProvider` reads tables, columns, types, primary keys, and foreign keys.
   - The Core `SchemaFormatter` renders the schema as prompt text.
   - A dev-only `GET /api/schema` returns the formatted schema for the demo.
@@ -164,8 +164,16 @@ Missing required configuration produces a clear startup or request error naming 
   - A UI warning banner that statements can modify data.
   - A "Reset sample database" note in the README for writers.
 - **Tests:** the missing-configuration path returns a readable error naming the key.
-- **Demo:** start the app with `Database:ConnectionString` unset. The error message names the key.
+- **Demo:** start the app with `Sql:ConnectionString` unset. The error message names the key.
 - **Estimate:** 5–8 minutes.
+
+### Deviations recorded during implementation
+
+- **Phase 3, generator split:** the plan's `ISqlGenerator` became `ISqlModelClient` (one prompt in, reply text out) behind `FoundrySqlModelClient`. Prompt building (`SqlPrompt`) and SQL extraction (`SqlExtractor`) live in Core inside `QueryService`, so AC3 and AC4 are unit-tested without Foundry.
+- **Phase 3, prompt shape:** the documented C# Responses call takes a single input string (`CreateResponseAsync(string)`), and the docs show no separate system-instructions parameter for plain model calls, so the instructions, schema and question are sent as one input. Packages: `Azure.AI.Projects` 2.0.1, `Azure.AI.Extensions.OpenAI` 2.0.0 (pulls `OpenAI` 2.9.1), `Azure.Identity` 1.21.0, all stable. Docs re-read 2026-11-10 (quickstart updated 2026-10-19).
+- **Phase 3, tenant pin:** `DefaultAzureCredential` on the developer machine returned a token from another tenant (an earlier credential in the chain), and Foundry answered `404 Workspace not found`. A raw REST call and `AzureCliCredential` both succeeded. The fix is the optional `Azure:TenantId` key (set in `appsettings.Development.json` to the tenant in `docs/environment.md`), passed to `DefaultAzureCredentialOptions.TenantId`. Azure SQL was unaffected because SqlClient takes the tenant from the server.
+- **Phase 4:** `Ask.razor` replaces the template `Home.razor` as `/`. It reads the question limit from `QueryOptions` and shows a note that generated SQL runs as-is and `seed` resets the data.
+- **Phase 3, response body:** `QueryResult` adds a `truncated` flag so the page can say "showing the first 50 rows".
 
 ## Parallel streams
 
@@ -189,5 +197,7 @@ Missing required configuration produces a clear startup or request error naming 
 - One fixed database from configuration; there is no database selector.
 - Only the first result set is returned. Multi-batch scripts (`GO`) are not supported.
 - The schema cache is not refreshed after DDL until the app restarts.
+- `appdb` is a serverless database that auto-pauses. The first connection after a pause can fail with error 40613 ("not currently available") while it resumes; retrying a few seconds later works. There is no automatic retry.
+- `Microsoft.Data.SqlClient` 7.1.1 pulls a vulnerable `System.Security.Cryptography.Pkcs` 9.0.18. The web project pins 10.0.14 directly; remove the pin once SqlClient ships with a patched dependency.
 - No authentication, rate limiting, or cost or token budget.
 - No retry or self-correction when the generated SQL fails.
