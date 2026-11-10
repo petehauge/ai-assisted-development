@@ -1,0 +1,70 @@
+# Builds, tests, and deploys TextToSql.Web to the Azure App Service web app aiasst-web-m4gvse.
+# See docs/deployment.md for the secrets and runtime settings this workflow relies on.
+name: Build and deploy web app
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-webapp-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  AZURE_WEBAPP_NAME: aiasst-web-m4gvse
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore TextToSql.slnx
+
+      - name: Build
+        run: dotnet build TextToSql.slnx --configuration Release --no-restore -warnaserror
+
+      # Live tests need secrets.json and Azure access, which the pipeline does not have.
+      - name: Test (Live excluded)
+        run: dotnet test TextToSql.slnx --configuration Release --no-build --filter "Category!=Live"
+
+      - name: Publish
+        run: dotnet publish src/TextToSql.Web/TextToSql.Web.csproj --configuration Release --no-restore --output ${{ runner.temp }}/webapp
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: webapp
+          path: ${{ runner.temp }}/webapp
+          if-no-files-found: error
+
+  deploy:
+    needs: build-and-test
+    # Deploy only from main (push or manual run), never from pull requests.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: webapp
+          path: webapp
+
+      - name: Deploy to Azure Web App
+        id: deploy
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: webapp
