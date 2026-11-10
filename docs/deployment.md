@@ -52,7 +52,7 @@ The hosted app has no `secrets.json`. It reads configuration from App Service ap
 |---|---|---|
 | `Foundry__ProjectEndpoint` | Foundry model calls (phase 3) | Present: `https://aiasst-foundry-m4gvse.services.ai.azure.com/api/projects/aiasst-project` |
 | `Foundry__DefaultDeployment` | Foundry model calls (phase 3) | Present: `gpt-5-mini` |
-| `Database__ConnectionString` | Azure SQL (phase 2 onward); the plan's key is `Database:ConnectionString` | **Missing.** The app has `Sql__ConnectionString` instead, which the app does not read. Either add `Database__ConnectionString` (same value as `Sql__ConnectionString`), or change the app's key. Not changed by this pipeline work. |
+| `Sql__ConnectionString` | Azure SQL (phase 2 onward); the code reads `Sql:ConnectionString` (`SqlConnectionFactory.ConnectionStringKey`) | Present: `Server=tcp:aiasst-sql-w3-m4gvse.database.windows.net,1433;Database=appdb;…;Authentication=Active Directory Default;` (no password) |
 | `Query__MaxRows`, `Query__CommandTimeoutSeconds`, `Query__MaxQuestionLength` | Optional overrides | Not needed; defaults come from `appsettings.json`. |
 
 ### Identity and roles
@@ -60,8 +60,9 @@ The hosted app has no `secrets.json`. It reads configuration from App Service ap
 | Requirement | Status |
 |---|---|
 | Managed identity **Foundry User** role on the Foundry project | Present at the Foundry account scope `aiasst-foundry-m4gvse` (from `az role assignment list --assignee <principal> --all`), which covers the project. |
-| Managed identity as a user in database `appdb` on `aiasst-sql-w3-m4gvse` with read/write (and DDL, since generated SQL may run DDL) | **Not verified.** It cannot be checked with `az`. If it is missing, an Entra admin of the SQL server runs, in `appdb`: `CREATE USER [aiasst-web-m4gvse] FROM EXTERNAL PROVIDER; ALTER ROLE db_datareader ADD MEMBER [aiasst-web-m4gvse]; ALTER ROLE db_datawriter ADD MEMBER [aiasst-web-m4gvse]; ALTER ROLE db_ddladmin ADD MEMBER [aiasst-web-m4gvse];` |
-| SQL server firewall allows Azure services | Not verified. |
+| Managed identity as a user in database `appdb` on `aiasst-sql-w3-m4gvse` with read/write (and DDL, since generated SQL may run DDL) | Present: user `aiasst-web-m4gvse` with `db_datareader`, `db_datawriter`, `db_ddladmin`. Its SID equals the identity's application ID `57e2c12b-…`, so it maps to the current identity (queried `sys.database_principals` as the server's Entra admin). If the identity is ever recreated, an Entra admin re-runs in `appdb`: `DROP USER [aiasst-web-m4gvse]; CREATE USER [aiasst-web-m4gvse] FROM EXTERNAL PROVIDER; ALTER ROLE db_datareader ADD MEMBER [aiasst-web-m4gvse]; ALTER ROLE db_datawriter ADD MEMBER [aiasst-web-m4gvse]; ALTER ROLE db_ddladmin ADD MEMBER [aiasst-web-m4gvse];` |
+| SQL server firewall allows Azure services | Present: rule `AllowAzureServices`. There is also a rule `AllowAll` (`0.0.0.0`–`255.255.255.255`), which opens the server to every IP; consider removing it outside this demo. |
+| Sample data in `appdb` | Present: Categories 6, Products 30, Customers 100, Orders 300, OrderItems 750 rows. |
 
 No Azure settings, identities, or role assignments were changed while setting up the pipeline.
 
@@ -78,3 +79,26 @@ gh run watch --repo petehauge/ai-assisted-development
 Or go to GitHub → Actions → **Build and deploy web app** → **Run workflow**.
 
 After a deploy, check the app with `curl https://aiasst-web-m4gvse.azurewebsites.net/api/health`, which should return `{"status":"ok"}`.
+
+## Deploying an uncommitted working tree (manual)
+
+The workflow deploys only committed code on `main`. To try uncommitted work on the hosted app, publish and zip-deploy it from your machine:
+
+```bash
+dotnet publish src/TextToSql.Web/TextToSql.Web.csproj --configuration Release --output <out-folder>
+```
+
+Zip the contents of `<out-folder>` (not the folder itself), then:
+
+```bash
+az webapp deploy --resource-group ai-assisted-staging-rg --name aiasst-web-m4gvse --src-path <zip> --type zip --clean true --restart true --track-status true
+```
+
+The next push to `main` replaces a manual deploy with whatever is committed.
+
+## Verification log
+
+| Date | What was deployed | How | Result |
+|---|---|---|---|
+| 2026-11-10 | Commit `93aa618` (phase 1) | Workflow run `42916483342` (push to `main`) | Both jobs passed; `/api/health` returned `{"status":"ok"}` |
+| 2026-11-10 | Uncommitted working tree (phase 2 done, phase 3 in progress; 44 non-Live tests passing) | Manual zip deploy (`RuntimeSuccessful`, 1 instance) | `/api/health` 200; `POST /api/query` "How many customers are there?" returned `SELECT COUNT(*) AS CustomerCount FROM dbo.Customers;` with `[[100]]` (about 9 s, Foundry and Azure SQL both through the managed identity); an empty question returned 400 "Please enter a question."; `/` returned 200 |
