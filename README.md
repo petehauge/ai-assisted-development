@@ -1,67 +1,127 @@
-# ai-assisted-development
+# Text to SQL
 
-Starting repo for AI-assisted development with Claude Code. It contains no application code yet: it holds the instructions, skills, and settings used to build an application live, in tested phases. The technology stack is chosen during planning.
+A .NET 10 web application that answers plain-English questions about a sample Azure SQL database. A Blazor page (and a JSON API) takes a question, sends it together with the database schema to a Microsoft Foundry model, runs the SQL the model returns, and shows the generated SQL with the first 50 result rows, the rows-affected count, or the error. It is a single-user demo for developers running locally; it has no authentication and runs every generated statement as-is, so point it only at the disposable sample database.
 
-## What's here
-
-| Path | Purpose |
-|---|---|
-| `CLAUDE.md` | Working rules for Claude: accuracy and integrity, workflow, definition of done, repository layout, testing, secrets handling, Azure usage, parallel-session file ownership |
-| `.claude/settings.json` | Project permissions (build tools, git, read-only Azure CLI, read access to `secrets.json`) and the plugins the project uses |
-| `.claude/skills/` | Project skills (see below) |
-| `secrets.example.json` | Shape of the gitignored `secrets.json` that holds Azure resource details and keys |
+> **Status:** phase 1 of 5 is built (project scaffold, configuration loading, `GET /api/health`, placeholder home page). Everything else below that carries a Planned marker comes from [docs/plan.md](docs/plan.md) and is not implemented yet.
 
 ## Prerequisites
 
-Do these once per machine, before a session:
+- **.NET SDK 10** (the plan records SDK 10.0.401). Check with `dotnet --list-sdks`.
+- **Azure resources** (listed in [docs/environment.md](docs/environment.md)):
+  - A Microsoft Foundry project and a chat model deployment (default `gpt-5-mini`).
+  - An Azure SQL database with Entra-only authentication (the sample database is created in it by the `seed` command).
+- **`az login`** to the tenant that holds those resources. The app authenticates with Microsoft Entra ID (`DefaultAzureCredential`), not API keys, so your account needs:
+  - the **Foundry User** role (formerly Azure AI User) on the Foundry project, and
+  - a user in the Azure SQL database with read, write, and DDL rights (the seed script drops and recreates tables).
+- **`secrets.json`** at the repo root (see Setup).
 
-- Open the repo in Claude Code once and accept the workspace trust prompt, so project permissions and plugin marketplaces apply.
-- Install the plugins. Enabling them in `.claude/settings.json` does not install them:
-  - `/plugin install pr-review-toolkit@claude-plugins-official` and `/plugin install claude-security@claude-plugins-official`
-  - For .NET projects: `/plugin marketplace add dotnet/skills`, `/plugin install dotnet@dotnet-agent-skills`, `/plugin install dotnet-test@dotnet-agent-skills`, and `/plugin install csharp-lsp@claude-plugins-official`
-  - Restart Claude Code, then check that `/plugin` and `/skills` list them.
-- Tools: Git, Azure CLI, GitHub CLI (`gh`, signed in, for the pipeline skill), and Python 3.9+ (used by `claude-security`). Add the SDK or runtime for the stack you expect, for example the .NET SDK plus `csharp-ls` (`dotnet tool install --global csharp-ls`), or Node.js.
-- Run `az login` to the right tenant and `az account set` to the subscription that holds the resource group you'll use.
-- Make sure the resource group has a Microsoft Foundry resource with a project and the model deployments you need. All AI in the app goes through the Foundry projects API, and `/azure-secrets` records the endpoints and deployments in `docs/environment.md`.
-- Make sure your account has the **Foundry User** role (formerly Azure AI User) on the Foundry project. The app authenticates with Microsoft Entra ID through your `az login`, not with API keys, and `/azure-secrets` checks for the role.
+## Setup
 
-## Typical development flow
+1. Produce `secrets.json` with the Claude Code skill `/azure-secrets <resource-group>`. It writes the gitignored `secrets.json` at the repo root and the secret-free inventory in [docs/environment.md](docs/environment.md). Its shape is shown in [secrets.example.json](secrets.example.json).
+2. Make sure these keys are present (full list in [docs/configuration.md](docs/configuration.md)):
+   - `Foundry:ProjectEndpoint`: the Foundry project endpoint.
+   - `Foundry:DefaultDeployment`: the model deployment name.
+   - `Database:ConnectionString`: an Azure SQL connection string with `Authentication=Active Directory Default` and no password. *Planned: read from phase 2. `/azure-secrets` records only the server name and databases (`Sql:<server>:Fqdn`, `Sql:<server>:Databases`), not this key, so add it yourself.*
+3. Build:
 
-```mermaid
-flowchart TD
-  A["/azure-secrets &lt;resource-group&gt;"] --> B["/clarify &lt;prompt&gt;"]
-  B -->|requirements confirmed| C["/plan-phases"]
-  C -->|plan approved| D["/implement-phase 1<br/>creates the project(s)"]
-  D --> E["/implement-phase 2, 3-4, ...<br/>one review and commit per request"]
-  E --> F["Wrap up: /production-review,<br/>/write-docs sync, final demo"]
-  C -.->|parallel session| W["/write-docs"]
-  D -.->|parallel session| P["/deploy-pipeline"]
-  E -.->|parallel session, after first end-to-end phase| R["/production-review quick"]
+```bash
+dotnet build TextToSql.slnx -warnaserror
 ```
 
-| Order | Step | Skill | Output | Runs |
-|---|---|---|---|---|
-| 1 | Pull Azure resource details and secrets | `/azure-secrets <resource-group>` | `secrets.json` (gitignored), `docs/environment.md` | Main session (`/clarify` can start alongside it in a second session) |
-| 2 | Clarify the prompt into scope, boundaries, and acceptance criteria | `/clarify <prompt>` | `docs/requirements.md` | Main session; answer the questions, then confirm |
-| 3 | Choose the stack, plan architecture and phases | `/plan-phases` | `docs/plan.md` | Main session; review and approve |
-| 4 | Create the project(s): structure, build, config, entry point, first test | `/implement-phase 1` | code, tests, commit | Main session |
-| 5 | Build the remaining phases and demo each one; a range is reviewed and committed together | `/implement-phase <n>` or `/implement-phase <first>-<last>` | code, tests, commits | Main session |
-| — | Documentation | `/write-docs`, then `/write-docs sync` near the end | `README.md`, `docs/architecture.md`, `docs/configuration.md` | Parallel session, after step 3 |
-| — | GitHub Actions pipeline that publishes to Azure, plus repository secrets (or build and test only with `ci-only`) | `/deploy-pipeline [target \| ci-only]` | `.github/workflows/`, `docs/deployment.md` | Parallel session, after step 4 |
-| — | Production readiness review | `/production-review [scope] [quick]` | `reports/production-review.html` | Parallel session, after the first end-to-end phase; full run at wrap-up |
-| — | Address review comments left in VS Code | `/local-comments` | fixes, answers, questions in chat | Any time |
+The app finds `secrets.json` by itself: from the `SECRETS_PATH` environment variable if set, otherwise by walking up from the app's folder to the repo root (and, in a git worktree, falling back to the main checkout). See [docs/configuration.md](docs/configuration.md#how-secretsjson-is-found).
 
-Every step stops for your review before it commits anything: Claude lists the changes and a proposed commit message, you review (leave editor comments and run `/local-comments` to iterate), and Claude commits only when you say so. To skip the review for a specific request, say so explicitly, for example "implement phases 2-3 and commit without review".
+## Usage
 
-Keep implementation in the main session. `CLAUDE.md` gives each parallel session its own files, so they don't collide. Use a separate git worktree only for phases the plan marks as independent and that need no Azure access; anything that needs `secrets.json` runs in the main checkout (see `CLAUDE.md`). Between phases, `/code-review` or the `pr-review-toolkit` agents give a quick check without the full report.
+Run the web app and API. `dotnet run` uses the first launch profile, `http`, which listens on `http://localhost:5212`; add `--launch-profile https` to also listen on `https://localhost:7075`.
 
-## Plugins
+```bash
+dotnet run --project src/TextToSql.Web
+```
 
-Declared in `.claude/settings.json` (install steps are under Prerequisites):
+The startup log says where `secrets.json` was loaded from, or why it was not (it never logs the contents). On the `http` profile it also logs a harmless warning that the HTTPS redirect port could not be determined.
 
-- `pr-review-toolkit`, `claude-security` from [claude-plugins-official](https://github.com/anthropics/claude-plugins-official)
-- For .NET projects: `dotnet`, `dotnet-test` from [dotnet/skills](https://github.com/dotnet/skills), and `csharp-lsp` from claude-plugins-official
+**Health check** (built):
 
-## Secrets
+```bash
+curl http://localhost:5212/api/health
+```
 
-`secrets.json` at the repo root is produced by `/azure-secrets`, is gitignored, and is the single local source of resource details and keys. Claude may read it to wire up configuration but never prints its values. The pipeline uses GitHub repository secrets instead, set by `/deploy-pipeline`.
+```json
+{"status":"ok"}
+```
+
+**Seed or reset the sample database.**
+
+> Planned: not yet implemented (phase 2).
+
+```bash
+dotnet run --project src/TextToSql.Web -- seed
+```
+
+It drops and recreates Categories, Products, Customers, Orders, and OrderItems with a few hundred deterministic rows, prints the tables and row counts, and exits. Run it again any time generated SQL has changed or dropped data.
+
+**Ask a question through the API.**
+
+> Planned: not yet implemented (phase 3).
+
+```bash
+curl -X POST http://localhost:5212/api/query -H "Content-Type: application/json" -d "{\"question\":\"How many customers are there?\"}"
+```
+
+The response is JSON with the fields `sql`, `columns`, `rows`, `rowsAffected`, and `error`. Status codes: 200 on success, 400 for an empty or over-long question (the model is not called), 422 when the generated SQL fails (the body includes the SQL and the database error; no retry), and 502 when the model call fails. The exact JSON layout will be documented here once phase 3 is built.
+
+**Ask a question on the website.**
+
+> Planned: not yet implemented (phase 4). Today `/` shows a placeholder page.
+
+Open `http://localhost:5212/`, type a question such as "Top 5 products by total quantity ordered", and press Ask. The page shows the generated SQL and either a results table (up to 50 rows, with a note when capped), the rows-affected count, or the error message.
+
+## Testing
+
+| Tests | Command | Needs |
+|---|---|---|
+| Unit (default) | `dotnet test TextToSql.slnx --filter "Category!=Live"` | Nothing external. Uses fakes; runs the web host in the `Testing` environment, which never reads `secrets.json`. |
+| Live | `dotnet test TextToSql.slnx --filter "Category=Live"` | `az login`, `secrets.json`, Foundry and Azure SQL access. Tagged `[Trait("Category", "Live")]` and skipped when their config is missing. *Planned: none exist yet (phases 2–3).* |
+
+```bash
+dotnet test TextToSql.slnx --filter "Category!=Live"
+```
+
+Today the unit suite has 11 tests covering the `secrets.json` locator, the configuration precedence order, and `GET /api/health`.
+
+## Project structure
+
+```text
+TextToSql.slnx
+Directory.Build.props             net10.0 settings: nullable, implicit usings, warnings as errors
+src/
+  TextToSql.Core/                 Domain types, interfaces, QueryService, prompt, SQL extraction (planned; empty today)
+  TextToSql.Web/                  Host: config loading, /api endpoints, Blazor UI, seed command, Azure implementations
+    Configuration/                secrets.json locator and configuration-source wiring
+    Components/                   Blazor layout and pages
+    Program.cs                    Entry point, DI and endpoint mapping
+tests/
+  TextToSql.Tests/                xUnit tests
+    Configuration/                secrets.json locator and precedence tests
+    Web/                          WebApplicationFactory endpoint tests
+```
+
+## Known limitations
+
+From [docs/plan.md](docs/plan.md#known-limitations):
+
+- **All SQL statement types run unfiltered** (a deliberate decision). Generated `DELETE`, `UPDATE`, or `DROP` statements change or destroy the sample data; run `seed` to restore it. Not suitable for any real database.
+- One fixed database from configuration; there is no database selector.
+- Only the first result set is returned. Multi-batch scripts (`GO`) are not supported.
+- The schema cache is not refreshed after DDL until the app restarts.
+- No authentication, rate limiting, or cost or token budget.
+- No retry or self-correction when the generated SQL fails.
+
+## Documentation
+
+- [docs/architecture.md](docs/architecture.md): components, main flow, decisions, error handling and security.
+- [docs/configuration.md](docs/configuration.md): every configuration key and the precedence order.
+- [docs/requirements.md](docs/requirements.md): scope, boundaries, acceptance criteria.
+- [docs/plan.md](docs/plan.md): stack, decisions, phases and their status.
+- [docs/environment.md](docs/environment.md): the Azure resources (no secrets).
+- [docs/development-workflow.md](docs/development-workflow.md): the Claude Code kit and skills used to build this repo.
