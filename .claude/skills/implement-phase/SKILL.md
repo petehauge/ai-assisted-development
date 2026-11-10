@@ -1,6 +1,6 @@
 ---
 name: implement-phase
-description: Implement one phase, or a range of phases, from docs/plan.md end to end - code plus meaningful tests, build, test, run the demo command, update the phase status, and commit each phase. Use when the user says to build, implement, or start a phase (for example "implement phase 2", "implement phase 2-3", or "next phase").
+description: Implement one phase, or a range of phases, from docs/plan.md end to end - code plus meaningful tests, build, test, run the demo command, update the phase status, prepare each phase for the user's review, and commit it once the user says so. Use when the user says to build, implement, or start a phase (for example "implement phase 2", "implement phase 2-3", or "next phase").
 argument-hint: "[phase-number | first-last]"
 ---
 
@@ -10,7 +10,7 @@ argument-hint: "[phase-number | first-last]"
 
 - **No argument:** use the first phase in `docs/plan.md` whose status is not `Done`, and say which one you picked.
 - **One number** (`2`): that phase.
-- **A range** (`2-3`, or a list such as `2,3`): run each phase in ascending order through the full Steps below, one at a time. Each phase gets its own verification, status update, and `phase-N:` commit before the next one starts. If any phase fails, stop there; do not start later phases in the range.
+- **A range** (`2-3`, or a list such as `2,3`): run each phase in ascending order through steps 1-5, one at a time. Each phase gets its own verification and status update before the next one starts, but don't stop for review between phases. After the last phase in the range, do one review (step 6) covering the whole range, then one commit for the range (step 7). If the user explicitly said to commit without review (for example "implement phase 2-3, commit without review"), instead commit each phase on its own after it passes verification and go straight on to the next. If any phase fails, stop there, do not start later phases, and prepare what is finished for review.
 
 ## Preconditions (check, do not assume)
 
@@ -37,8 +37,8 @@ argument-hint: "[phase-number | first-last]"
 
 5. **Update `docs/plan.md`**: phase status `Done`, a one-line note (what was built, test count), and any deviations from the plan or new known limitations.
 
-6. **Commit.** Confirm `secrets.json` is not staged, then commit `src/`, `tests/`, build files, and `docs/plan.md` with message `phase-N: <phase title>`.
+6. **Prepare for review, then stop** (Review before commit in `CLAUDE.md`). For a range, do this once after the last phase and report each phase. Report in a few lines: what was built, tests added and passing, the demo command and its actual output (with any secret values masked), deviations, the changed files, the proposed commit message (see step 7), and the exact paths to commit. Don't stage or commit. If the user leaves review comments (often through `/local-comments`), fix them, re-run the build and tests, and prepare for review again. Skip this stop only if the user explicitly said to commit without review.
 
-7. **Report** in a few lines: what was built, tests added and passing, the demo command and its actual output (with any secret values masked), deviations, and the next phase. For a range, report each phase, then continue to the next phase in the range. After the last requested phase, do not start another until the user says so.
+7. **Commit when the user says so.** Confirm `secrets.json` is not staged, then commit `src/`, `tests/`, build files, and `docs/plan.md` by explicit path, so files from parallel sessions aren't swept in: `git add -- <those paths>`, then `git commit -m "phase-N: <phase title>" -- <those paths>`. A reviewed range is one commit, because its phases' changes can't be reliably split apart after the fact: use `phase-2-3: <phase 2 title>; <phase 3 title>` (the first and last phase numbers). After the last requested phase, do not start another until the user says so.
 
 If anything fails and cannot be fixed within the phase's scope, stop, leave the phase `In progress`, and report exactly what failed with the output.

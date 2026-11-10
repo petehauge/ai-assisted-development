@@ -25,7 +25,7 @@ If the code does not exist yet (running in parallel with phase 1), write from th
 
 **README.md**
 - One-paragraph overview: what it does, who it is for.
-- Prerequisites (runtime or SDK version for the chosen stack, Azure resources, `secrets.json`).
+- Prerequisites (runtime or SDK version for the chosen stack, Azure resources, `secrets.json`, and `az login` with the Foundry User role on the Foundry project, since the app authenticates with Microsoft Entra ID).
 - Setup: how to produce `secrets.json` (`/azure-secrets`) and which keys are required.
 - Usage: the real CLI syntax with two or three realistic examples and sample output.
 - Testing: unit vs Live tests and the commands to run each.
@@ -50,4 +50,8 @@ If the code does not exist yet (running in parallel with phase 1), write from th
 - Every Mermaid block is syntactically valid (simple `flowchart`/`sequenceDiagram` syntax, no unescaped special characters in labels).
 - No secret values appear anywhere: search the files you wrote for `key`, `password`, `connectionstring`, and `AccountKey=` and confirm only key paths or placeholders appear.
 
-Report which files you created or updated and what is still marked Planned.
+## Review, then commit
+
+Prepare the changes for review, following Review before commit in `CLAUDE.md`: report which files you created or updated, what is still marked Planned, and the proposed commit message. Don't commit until the user says so.
+
+When they do, commit only the files you wrote, by explicit path, because the implementation session may have files staged in the same working folder: `git add -- <your files>`, then `git commit -m "docs: <summary>" -- <your files>`. Confirm `secrets.json` is not among them.

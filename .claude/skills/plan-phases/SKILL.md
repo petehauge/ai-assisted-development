@@ -18,11 +18,11 @@ description: Write docs/plan.md from confirmed requirements - architecture, key 
 
 3. **Record decisions.** For each significant choice (stack, libraries, test framework, Foundry deployment and agent vs plain model call, output format, how AI results are validated, hosting target), write a short entry in the Decisions section: decision, options considered, why, consequences. Three to six decisions is typical.
 
-4. **Cut phases.** Target 4–6 phases, each roughly 8–12 minutes of work. Rules:
+4. **Cut phases.** Target 3–5 phases, each roughly 8–12 minutes of work. Setup (environment, clarify, plan) takes about 15 minutes of the ~60-minute session, so more than five phases will not fit. Rules:
    - **Phase 1 creates the project(s)**: app and test projects in the chosen stack, shared build settings (warnings as errors where supported, for example `Directory.Build.props` in .NET), configuration loading in the order given in `CLAUDE.md`, logging, an entry point that runs, and at least one meaningful passing test. Documentation and the deployment pipeline start from this structure, so keep phase 1 small and get it done early.
    - Every phase ends in a **runnable, demonstrable** state with a concrete demo command and the expected output.
    - Every phase lists the **tests** it adds, mapped to acceptance criteria from `docs/requirements.md`. Plan only tests that meet the bar in the Testing section of `CLAUDE.md`.
-   - Order phases so the riskiest integration (usually the first real Foundry call) happens early, behind an interface with a fake for tests. Per `CLAUDE.md`, it uses the Foundry projects API, and its decision cites the current documentation it was built from.
+   - Order phases so the riskiest integration (usually the first real Foundry call) happens early, behind an interface with a fake for tests. Per `CLAUDE.md`, it uses the Foundry projects API with Microsoft Entra ID authentication (`DefaultAzureCredential`; reads `Foundry:ProjectEndpoint` and `Foundry:DefaultDeployment`), and its decision cites the current documentation it was built from. Record `az login` and the Foundry User role as a prerequisite and a risk.
    - Real AI or Azure calls get a Live-tagged integration test; everything else uses fakes.
    - Keep a final phase for hardening (error handling, limits, output polish) only if time allows; it is the first thing to cut.
 
@@ -32,4 +32,4 @@ description: Write docs/plan.md from confirmed requirements - architecture, key 
 
 7. **Write `docs/plan.md`** with a `Status: Draft` line, a link to `requirements.md`, and these sections: Stack and commands, Architecture (with the diagram and a project/responsibility table), Decisions (table: #, decision, options, why, consequences), Phases (a summary table of number, title, status, demo command, note, then one short block per phase with goal, scope, out of scope, tests, acceptance criteria covered, demo command with expected output, and estimate), Parallel streams, Risks, Known limitations. Set every phase status to `Not started`.
 
-8. **Ask for review.** Summarize phases in a compact table (number, goal, demo command) and ask the user to approve or adjust. When approved, set the plan status to `Approved`. Next step: `/implement-phase 1`.
+8. **Ask for review.** Summarize phases in a compact table (number, goal, demo command) and ask the user to approve or adjust. When approved, set the plan status to `Approved`. Approving the plan is not permission to commit: follow Review before commit in `CLAUDE.md`. When the user says to commit, commit only this file: `git add -- docs/plan.md`, then `git commit -m "plan: <title>" -- docs/plan.md`. Next step: `/implement-phase 1`.

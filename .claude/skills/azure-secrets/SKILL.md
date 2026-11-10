@@ -45,15 +45,27 @@ The output is two files:
 | `Microsoft.Sql/servers` | `Sql:<name>` | FQDN and database names only (passwords cannot be read; note it in gaps) |
 | anything else | `Other:<name>` | type, location, and resource id only |
 
+   If an AIServices account exists but no `accounts/projects` resources appeared in the listing, do not assume there are none: record it in `_meta.gaps` and ask the user for the project name, because every AI call needs a project endpoint.
+
+3a. **Set the default Foundry keys** the application reads, so app configuration never needs a resource or project name:
+   - `Foundry:ProjectEndpoint`: the endpoint of the only Foundry project. If there are several, ask the user which one is the default.
+   - `Foundry:DefaultDeployment`: the name of the only chat-capable model deployment. If there are several, ask the user which one is the default.
+   Keep the full detail (`Foundry:Projects:<name>`, `Foundry:Deployments`) alongside them.
+
+3b. **Check Foundry access.** The app authenticates to the projects API with Microsoft Entra ID (see `CLAUDE.md`), so the signed-in user needs the **Foundry User** role (formerly Azure AI User), or a broader role, on the project. Read-only check: `az ad signed-in-user show --query id -o tsv`, then `az role assignment list --assignee <object id> --scope <project or account resource id> --include-inherited --include-groups --query "[].roleDefinitionName" -o tsv`. Record the result in `docs/environment.md`. If no suitable role shows up, say so in the report and record it in `_meta.gaps`; do not assign roles yourself. The listing can miss some assignments (for example PIM-eligible roles that haven't been activated), so treat it as a hint and not proof.
+
 4. **Write `secrets.json`** with PowerShell so values never reach the console: build a `[ordered]` hashtable, merge with the existing file if present (`Get-Content secrets.json -Raw | ConvertFrom-Json -AsHashtable`), then `ConvertTo-Json -Depth 20 | Set-Content -Encoding utf8 secrets.json`. Fill `_meta` with tenant, subscription, resource group, UTC timestamp, and gaps.
 
 5. **Verify without revealing.** Confirm `secrets.json` parses, run `git check-ignore secrets.json` (it must print the path), and count populated values per section.
 
 6. **Write `docs/environment.md`** with no secret values:
    - Header: subscription name, resource group, region(s), generated timestamp.
-   - A table per section: resource name, type, endpoint or URL, and the `secrets.json` key paths available (for example `Foundry:ApiKey`).
-   - Model deployments table: deployment name, model, version, SKU. Foundry projects table: project name and project endpoint, because the application calls Foundry through the projects API. These are what planning needs most.
+   - A table per section: resource name, type, endpoint or URL, and the `secrets.json` key paths available (for example `Foundry:ProjectEndpoint`).
+   - Model deployments table: deployment name, model, version, SKU. Foundry projects table: project name and project endpoint, because the application calls Foundry through the projects API. Mark the defaults (`Foundry:ProjectEndpoint`, `Foundry:DefaultDeployment`). These are what planning needs most.
+   - Foundry access: the authentication model (Entra ID), the signed-in user, and the role check result from step 3b.
    - App settings: list setting **names** only.
    - Gaps: what could not be read and why.
 
-7. **Report** to the user in a few lines: resources found by type, sections written, masked sample of each key path, gaps, and a reminder that `secrets.json` is gitignored. Mention any value the app likely needs that is still missing (for example no Foundry project or no model deployments, since all AI calls go through a Foundry project).
+7. **Report** to the user in a few lines: resources found by type, sections written, masked sample of each key path, gaps, and a reminder that `secrets.json` is gitignored. Mention any value the app likely needs that is still missing (for example no Foundry project, no model deployments, or no Foundry User role, since all AI calls go through a Foundry project with Entra ID).
+
+8. **Prepare `docs/environment.md` for review**, following Review before commit in `CLAUDE.md`, and don't commit until the user says so. Then confirm `git status` does not show `secrets.json` (it must stay ignored), and commit only this file: `git add -- docs/environment.md`, then `git commit -m "env: Azure environment inventory" -- docs/environment.md`.

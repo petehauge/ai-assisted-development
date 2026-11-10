@@ -1,0 +1,15 @@
+# Store text files with LF in the repo and check them out with LF on every OS. Files Claude writes are LF, so this stops git's "LF will be replaced by CRLF" warnings on every commit. A tool that writes CRLF (for example some `dotnet new` templates) triggers a one-time "CRLF will be replaced by LF" warning when the file is first added.
+* text=auto eol=lf
+
+# Windows-only formats that need CRLF in the working tree.
+*.sln text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binary files: never convert.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.pfx binary
+*.snk binary
