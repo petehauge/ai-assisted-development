@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TextToSql.Core/TextToSql.Core.csproj" />
+    <Project Path="src/TextToSql.Web/TextToSql.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TextToSql.Tests/TextToSql.Tests.csproj" />
+  </Folder>
+</Solution>

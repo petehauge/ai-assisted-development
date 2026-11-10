@@ -20,7 +20,7 @@ Requirements: [requirements.md](requirements.md)
 | Run (web + API) | `dotnet run --project src/TextToSql.Web` |
 | Seed sample database | `dotnet run --project src/TextToSql.Web -- seed` |
 
-Assumption: the solution file format (`.slnx` is the .NET 10 default) and the `--filter` syntax depend on the test runner that phase 1 sets up. Phase 1 verifies these commands and corrects this table if they differ.
+Verified in phase 1: `dotnet new sln` produced `TextToSql.slnx`. The tests use xUnit 2.9.3 on the VSTest runner (`xunit.runner.visualstudio`, from the `dotnet new xunit` template), so the `--filter "Category!=Live"` and `--filter "Category=Live"` syntax works as written. `Microsoft.AspNetCore.Mvc.Testing` is pinned to 10.0.12 to match the installed ASP.NET Core runtime (10.0.15's dependencies did not resolve from nuget.org on 2026-11-10). Ports from `launchSettings.json`: `http://localhost:5212` (`--launch-profile http`), plus `https://localhost:7075` on the default `https` profile.
 
 ## Architecture
 
@@ -73,7 +73,7 @@ Missing required configuration produces a clear startup or request error naming 
 
 | # | Title | Status | Demo command | Note |
 |---|---|---|---|---|
-| 1 | Scaffold, configuration, health endpoint | Not started | `dotnet run --project src/TextToSql.Web`, then `curl http://localhost:<port>/api/health` | |
+| 1 | Scaffold, configuration, health endpoint | Done | `dotnet run --project src/TextToSql.Web`, then `curl http://localhost:<port>/api/health` | Solution, 3 projects, secrets.json locator + config order, `/api/health`; 11 tests passing |
 | 2 | Sample database and schema reader | Not started | `dotnet run --project src/TextToSql.Web -- seed`, then `curl http://localhost:<port>/api/schema` | |
 | 3 | Foundry SQL generation, execution, and `/api/query` | Not started | `curl -X POST http://localhost:<port>/api/query -H "Content-Type: application/json" -d "{\"question\":\"How many customers are there?\"}"` | |
 | 4 | Blazor question page | Not started | Run the app, open `/`, ask a question | |
